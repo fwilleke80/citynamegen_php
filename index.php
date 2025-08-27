@@ -6,7 +6,7 @@ ini_set('log_errors', '1');
 @set_time_limit(5);                    // short runtime
 @ini_set('memory_limit', '64M'); // small memory cap is fine for this
 
-header("Content-Security-Policy: default-src 'self'; base-uri 'self'; form-action 'self'; style-src 'self' 'unsafe-inline'");
+header("Content-Security-Policy: default-src 'self'; base-uri 'self'; form-action 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'");
 header('X-Frame-Options: DENY');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: no-referrer');
@@ -23,7 +23,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 /** @var string */
 const SCRIPTTITLE = 'City Name Generator';
 /** @var string */
-const SCRIPTVERSION = '1.0.2';
+const SCRIPTVERSION = '1.0.3';
 /** @var string */
 const DATAFILENAME = 'citynamegen_data.json';
 
@@ -263,13 +263,31 @@ final class CityNameGenerator
 	}
 } // class CityNameGenerator
 
+/**
+ * @brief	Read an int GET param within a range, fall back to default.
+ * @param[in] key
+ * @param[in] def
+ * @param[in] min
+ * @param[in] max
+ * @return	int
+ */
+function getInt(string $key, int $def, int $min, int $max): int
+{
+	if (!isset($_GET[$key]))
+	{
+		return $def;
+	}
+	$v = (int)$_GET[$key];
+	$v = max($min, min($max, $v));
+	return $v;
+}
+
 // --------------------------------------------------------------------------------------
 // Web Controller (only)
 // --------------------------------------------------------------------------------------
 
 $count_default = 10;
-
-$count = isset($_GET['count']) ? max(1, (int)$_GET['count']) : $count_default;
+$count = getInt(key: 'count', def: $count_default, min: 1, max: 999);
 $stats = isset($_GET['stats']);
 
 $gen = new CityNameGenerator();
@@ -338,6 +356,14 @@ mt_srand((int)microtime(true));
 			?></pre>
 		<?php endif; ?>
 	<?php endif; ?>
+	<?php
+	$otherApp = __DIR__ . '/../namegen/index.php';
+
+	if (file_exists($otherApp))
+	{
+		echo '<p>Probier auch mal den <a href="../namegen/">German Name Generator</a>!</p>';
+	}
+	?>
 	<p class="footer">&copy; 2025 by <a href="https://www.frankwilleke.de">www.frankwilleke.de</a></p>
 </body>
 </html>
