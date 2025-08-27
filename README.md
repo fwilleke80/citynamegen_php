@@ -1,4 +1,4 @@
-# City Name Generator (PHP, Web)
+# City Name Generator
 
 This is a **PHP port** of the original Python *cityname* script.  
 It generates random German-style (and sometimes funny) city names from syllable sets stored in a JSON file.  
