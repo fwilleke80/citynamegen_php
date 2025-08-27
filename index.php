@@ -23,9 +23,13 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 /** @var string */
 const SCRIPTTITLE = 'City Name Generator';
 /** @var string */
-const SCRIPTVERSION = '1.0.3';
+const SCRIPTVERSION = '1.1.0';
 /** @var string */
 const DATAFILENAME = 'citynamegen_data.json';
+
+const DEF_DOUBLE = 0.10; // default threshold for double names (hyphenated)
+const DEF_PREFIX = 0.15; // default threshold for prefixes
+const DEF_SUFFIX = 0.11; // default threshold for suffixes
 
 // --------------------------------------------------------------------------------------
 // Utilities
@@ -72,9 +76,9 @@ function titlecase(string $s): string
 final class CityNameGenerator
 {
 	// Thresholds (probabilities to ADD the feature if frand() > threshold)
-	private float $_prefixThreshold = 0.85; ///< Chance trigger for adding a prefix
-	private float $_suffixThreshold = 0.89; ///< Chance trigger for adding a suffix
-	private float $_doubleThreshold = 0.90; ///< Chance trigger for hyphenated double base
+	private float $_prefixThreshold = DEF_PREFIX;
+	private float $_suffixThreshold = DEF_SUFFIX;
+	private float $_doubleThreshold = DEF_DOUBLE;
 
 	/** @var string[] */
 	private array $_prefixes = [];
@@ -127,6 +131,20 @@ final class CityNameGenerator
 
 		// Minimal validation
 		return (count($this->_parts[0]) > 0) && (count($this->_parts[1]) > 0);
+	}
+
+	/**
+	 * @brief Override thresholds at runtime; values are clamped to [0,1].
+	 * @param[in] prefix  Probability to add a prefix (frand() > threshold in your script)
+	 * @param[in] suffix  Probability to add a suffix
+	 * @param[in] dbl     Probability to hyphenate a double base
+	 * @return void
+	 */
+	public function setThresholds(float $prefix, float $suffix, float $dbl): void
+	{
+		$this->_prefixThreshold = max(0.0, min(1.0, $prefix));
+		$this->_suffixThreshold = max(0.0, min(1.0, $suffix));
+		$this->_doubleThreshold = max(0.0, min(1.0, $dbl));
 	}
 
 	/**
@@ -214,8 +232,9 @@ final class CityNameGenerator
 		{
 			return $base;
 		}
-		// Trigger if random is greater than threshold (e.g., 0.15 chance when threshold=0.85)
-		if (frand() > $this->_prefixThreshold)
+
+		// Trigger if random is lower than threshold
+		if (frand() < $this->_prefixThreshold)
 		{
 			$pref = $this->_prefixes[array_rand($this->_prefixes)];
 			return $pref . ' ' . $base;
@@ -234,7 +253,7 @@ final class CityNameGenerator
 		{
 			return $base;
 		}
-		if (frand() > $this->_suffixThreshold)
+		if (frand() < $this->_suffixThreshold)
 		{
 			$suf = $this->_suffixes[array_rand($this->_suffixes)];
 			return $base . ' ' . $suf;
@@ -251,7 +270,7 @@ final class CityNameGenerator
 		$base = $this->generateBase();
 
 		// Optional double: CityA-CityB
-		if (frand() > $this->_doubleThreshold)
+		if (frand() < $this->_doubleThreshold)
 		{
 			$base2 = $this->generateBase();
 			$base = $base . '-' . $base2;
@@ -294,6 +313,22 @@ $gen = new CityNameGenerator();
 $dataFile = __DIR__ . DIRECTORY_SEPARATOR . DATAFILENAME;
 $loaded = $gen->loadData($dataFile);
 
+// Helpers (same pattern as in namegen)
+function get01(string $key, float $def): float
+{
+	if (!isset($_GET[$key])) { return $def; }
+	$v = (float)$_GET[$key];
+	if (!is_finite($v)) { return $def; }
+	return max(0.0, min(1.0, $v));
+}
+
+$tprefix = get01('t_prefix', DEF_PREFIX);
+$tsuffix = get01('t_suffix', DEF_SUFFIX);
+$tdouble = get01('t_double', DEF_DOUBLE);
+
+// Apply runtime thresholds
+$gen->setThresholds($tprefix, $tsuffix, $tdouble);
+
 mt_srand((int)microtime(true));
 ?>
 <!doctype html>
@@ -309,12 +344,107 @@ mt_srand((int)microtime(true));
 		input[type="number"] { width: 7rem; }
 		pre { background: #111; color: #0f0; padding: 1rem; border-radius: 8px; overflow: auto; }
 		.err { background: #fee; color: #900; padding: 0.75rem; border: 1px solid #f99; border-radius: 8px; }
-		.footer { font-size: 0.75em; }
-		.grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap: 1rem; }
-		button { padding: .6rem 1rem; border-radius: 10px; border: 1px solid #ccc; color: #111; -webkit-text-fill-color: #111; background: #f6f6f6; -webkit-appearance: none; appearance: none; cursor: pointer; }
+		.grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 1rem; }
+		.grid-2 { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 1rem; }
+		button { padding: .6rem 1rem; border-radius: 10px; border: 1px solid #ccc; background: #f6f6f6; cursor: pointer; -webkit-appearance: none; appearance: none; -webkit-text-fill-color: #111; color: #111; }
 		button:hover { background: #eee; }
-		h2 small { color: #666; font-weight: normal; }
+		.range-row { display: grid; grid-template-columns: 1fr 70px; align-items: center; gap: .75rem; }
+		.range-row output { text-align: right; font-variant-numeric: tabular-nums; }
+		.small { color: #666; font-size: .9rem; }
+		hr { border: none; height: 1px; background: #ddd; margin: 1rem 0; }
+		/* Collapsible parameters */
+		details.params { border: 1px solid #ddd; border-radius: 8px; padding: .5rem .75rem; background: #fafafa; }
+		details.params > summary { cursor: pointer; user-select: none; display: flex; align-items: center; gap: .5rem; font-weight: 600; outline: none; list-style: none;}
+		details.params > summary::-webkit-details-marker { display: none; }
+		details.params > summary::before { content: '▸'; transition: transform .15s ease-in-out; }
+		details.params[open] > summary::before { transform: rotate(90deg); }
+		details.params .content { margin-top: .75rem; }
 	</style>
+	<script>
+	document.addEventListener('DOMContentLoaded', function ()
+	{
+		function fmt01(x)
+		{
+			return (Math.round(x * 100) / 100).toFixed(2);
+		}
+		function bindRange(id, outId)
+		{
+			const el = document.getElementById(id);
+			const out = document.getElementById(outId);
+			const update = () => { out.value = fmt01(parseFloat(el.value)); };
+			el.addEventListener('input', update);
+			update();
+		}
+
+		// Defaults as provided by PHP (after JSON load)
+		const DEF = Object.freeze({
+			t_prefix: <?= json_encode($DEF_PREFIX) ?>,
+			t_suffix: <?= json_encode($DEF_SUFFIX) ?>,
+			t_double: <?= json_encode($DEF_DOUBLE) ?>
+		});
+
+		// Reset to defaults (mirrors namegen behavior)
+		document.getElementById('btn-reset').addEventListener('click', function ()
+		{
+			const f = document.querySelector('form');
+
+			f.t_prefix.value = DEF.t_prefix;
+			f.t_suffix.value = DEF.t_suffix;
+			f.t_double.value = DEF.t_double;
+
+			// Uncheck stats, keep count as-is (or reset it too if you prefer)
+			if (f.stats) { f.stats.checked = false; }
+
+			// Update readouts
+			document.getElementById('out_prefix').value = fmt01(DEF.t_prefix);
+			document.getElementById('out_suffix').value = fmt01(DEF.t_suffix);
+			document.getElementById('out_double').value = fmt01(DEF.t_double);
+		});
+
+		// Bind live readouts
+		bindRange('t_prefix', 'out_prefix');
+		bindRange('t_suffix', 'out_suffix');
+		bindRange('t_double', 'out_double');
+
+		// Remember <details> open/closed
+		const KEY = 'cityname.paramsOpen';
+		const d = document.getElementById('genparams');
+		if (d)
+		{
+			// Restore prior choice
+			try
+			{
+				if (localStorage.getItem(KEY) === '1') { d.setAttribute('open', ''); }
+			}
+			catch (_) {}
+
+			// Auto-open if URL already has any parameter keys
+			const params = new URLSearchParams(location.search);
+			const urlKeys = ['t_prefix','t_suffix','t_double'];
+			if (!d.hasAttribute('open'))
+			{
+				for (const k of urlKeys)
+				{
+					if (params.has(k))
+					{
+						d.setAttribute('open', '');
+						break;
+					}
+				}
+			}
+
+			// Save on toggle
+			d.addEventListener('toggle', function ()
+			{
+				try
+				{
+					localStorage.setItem(KEY, d.open ? '1' : '0');
+				}
+				catch (_) {}
+			});
+		}
+	});
+	</script>
 </head>
 <body>
 	<h1><?= htmlspecialchars(SCRIPTTITLE . ' ' . SCRIPTVERSION, ENT_QUOTES) ?></h1>
@@ -332,8 +462,45 @@ mt_srand((int)microtime(true));
 				</label>
 			</div>
 		</fieldset>
+
+		<hr>
+
+		<details id="genparams" class="params">
+			<summary>Parameter</summary>
+
+			<div class="grid">
+				<div>
+					<label for="t_prefix">Pr&auml;fix (Wahrscheinlichkeit)</label>
+					<div class="range-row">
+						<input id="t_prefix" name="t_prefix" type="range" min="0" max="1" step="0.01" value="<?= htmlspecialchars((string)$tprefix, ENT_QUOTES) ?>">
+						<output id="out_prefix"></output>
+					</div>
+					<p class="small">Typischer Wertebereich: 0.00–0.50 (default <?= number_format(DEF_PREFIX, 2) ?>)</p>
+				</div>
+
+				<div>
+					<label for="t_suffix">Suffix (Wahrscheinlichkeit)</label>
+					<div class="range-row">
+						<input id="t_suffix" name="t_suffix" type="range" min="0" max="1" step="0.01" value="<?= htmlspecialchars((string)$tsuffix, ENT_QUOTES) ?>">
+						<output id="out_suffix"></output>
+					</div>
+					<p class="small">Typischer Wertebereich: 0.00–0.60 (Default <?= number_format(DEF_SUFFIX, 2) ?>)</p>
+				</div>
+
+				<div>
+					<label for="t_double">Doppelname mit Bindestrich (Wahrscheinlichkeit)</label>
+					<div class="range-row">
+						<input id="t_double" name="t_double" type="range" min="0" max="1" step="0.01" value="<?= htmlspecialchars((string)$tdouble, ENT_QUOTES) ?>">
+						<output id="out_double"></output>
+					</div>
+					<p class="small">Typischer Wertebereich: 0.00–0.40 (Default <?= number_format(DEF_DOUBLE, 2) ?>)</p>
+				</div>
+			</div>
+		</details>
+
 		<p style="margin-top:1rem">
 			<button type="submit">Generieren!</button>
+				<button type="button" id="btn-reset">Reset to defaults</button>
 		</p>
 	</form>
 
