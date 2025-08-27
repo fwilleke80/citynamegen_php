@@ -23,7 +23,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 /** @var string */
 const SCRIPTTITLE = 'City Name Generator';
 /** @var string */
-const SCRIPTVERSION = '1.1.0';
+const SCRIPTVERSION = '1.1.2';
 /** @var string */
 const DATAFILENAME = 'citynamegen_data.json';
 
@@ -361,95 +361,77 @@ mt_srand((int)microtime(true));
 		details.params .content { margin-top: .75rem; }
 	</style>
 	<script>
+	// Defaults as provided by PHP (after JSON load)
+	const DEF = Object.freeze({
+		t_prefix: <?= json_encode(DEF_PREFIX) ?>,
+		t_suffix: <?= json_encode(DEF_SUFFIX) ?>,
+		t_double: <?= json_encode(DEF_DOUBLE) ?>,
+		count: 10
+	});
+
+	function resetToDefaults()
+	{
+		const f = document.getElementById('form');
+		f.count.value = DEF.count;
+
+		f.t_prefix.value = DEF.t_prefix;
+		f.t_suffix.value = DEF.t_suffix;
+		f.t_double.value = DEF.t_double;
+
+		// Uncheck stats
+		f.stats.checked = false;
+
+		// Update readouts
+		document.getElementById('out_prefix').value = fmt01(DEF.t_prefix);
+		document.getElementById('out_suffix').value = fmt01(DEF.t_suffix);
+		document.getElementById('out_double').value = fmt01(DEF.t_double);
+	}
+
+	function fmt01(x)
+	{
+		return (Math.round(x * 100) / 100).toFixed(2);
+	}
+
+	function bindRange(id, outId)
+	{
+		const el = document.getElementById(id);
+		const out = document.getElementById(outId);
+		const update = () => { out.value = fmt01(parseFloat(el.value)); };
+		el.addEventListener('input', update);
+		update();
+	}
+
 	document.addEventListener('DOMContentLoaded', function ()
 	{
-		function fmt01(x)
-		{
-			return (Math.round(x * 100) / 100).toFixed(2);
-		}
-		function bindRange(id, outId)
-		{
-			const el = document.getElementById(id);
-			const out = document.getElementById(outId);
-			const update = () => { out.value = fmt01(parseFloat(el.value)); };
-			el.addEventListener('input', update);
-			update();
-		}
-
-		// Defaults as provided by PHP (after JSON load)
-		const DEF = Object.freeze({
-			t_prefix: <?= json_encode($DEF_PREFIX) ?>,
-			t_suffix: <?= json_encode($DEF_SUFFIX) ?>,
-			t_double: <?= json_encode($DEF_DOUBLE) ?>
-		});
-
-		// Reset to defaults (mirrors namegen behavior)
-		document.getElementById('btn-reset').addEventListener('click', function ()
-		{
-			const f = document.querySelector('form');
-
-			f.t_prefix.value = DEF.t_prefix;
-			f.t_suffix.value = DEF.t_suffix;
-			f.t_double.value = DEF.t_double;
-
-			// Uncheck stats, keep count as-is (or reset it too if you prefer)
-			if (f.stats) { f.stats.checked = false; }
-
-			// Update readouts
-			document.getElementById('out_prefix').value = fmt01(DEF.t_prefix);
-			document.getElementById('out_suffix').value = fmt01(DEF.t_suffix);
-			document.getElementById('out_double').value = fmt01(DEF.t_double);
-		});
-
-		// Bind live readouts
-		bindRange('t_prefix', 'out_prefix');
-		bindRange('t_suffix', 'out_suffix');
-		bindRange('t_double', 'out_double');
-
-		// Remember <details> open/closed
-		const KEY = 'cityname.paramsOpen';
+		const KEY = 'citynamegen.paramsOpen';
 		const d = document.getElementById('genparams');
-		if (d)
+		if (!d) { return; }
+
+		try
 		{
-			// Restore prior choice
+			if (localStorage.getItem(KEY) === '1')
+			{
+				d.setAttribute('open', '');
+			}
+		}
+		catch (_) {}
+
+		// Save on toggle
+		d.addEventListener('toggle', function ()
+		{
 			try
 			{
-				if (localStorage.getItem(KEY) === '1') { d.setAttribute('open', ''); }
+				localStorage.setItem(KEY, d.open ? '1' : '0');
 			}
 			catch (_) {}
-
-			// Auto-open if URL already has any parameter keys
-			const params = new URLSearchParams(location.search);
-			const urlKeys = ['t_prefix','t_suffix','t_double'];
-			if (!d.hasAttribute('open'))
-			{
-				for (const k of urlKeys)
-				{
-					if (params.has(k))
-					{
-						d.setAttribute('open', '');
-						break;
-					}
-				}
-			}
-
-			// Save on toggle
-			d.addEventListener('toggle', function ()
-			{
-				try
-				{
-					localStorage.setItem(KEY, d.open ? '1' : '0');
-				}
-				catch (_) {}
-			});
-		}
+		});
 	});
 	</script>
 </head>
 <body>
 	<h1><?= htmlspecialchars(SCRIPTTITLE . ' ' . SCRIPTVERSION, ENT_QUOTES) ?></h1>
 
-	<form method="get">
+	<form id="form" method="get">
 		<fieldset class="grid">
 			<div>
 				<label for="count">Anzahl</label>
@@ -498,11 +480,18 @@ mt_srand((int)microtime(true));
 			</div>
 		</details>
 
-		<p style="margin-top:1rem">
+		<p style="margin-top:1rem; display:flex; gap:.5rem; flex-wrap:wrap">
 			<button type="submit">Generieren!</button>
-				<button type="button" id="btn-reset">Reset to defaults</button>
+			<button type="button" onclick="resetToDefaults()">Zur&uuml;cksetzen</button>
 		</p>
 	</form>
+
+	<script type="text/javascript">
+	// Bind sliders to readouts
+	bindRange('t_prefix', 'out_prefix');
+	bindRange('t_suffix', 'out_suffix');
+	bindRange('t_double', 'out_double');
+	</script>
 
 	<?php if (!$loaded): ?>
 		<p class="err">Konnte <code><?= htmlspecialchars(DATAFILENAME, ENT_QUOTES) ?></code> im aktuellen Ordner nicht laden.</p>
