@@ -27,9 +27,10 @@ const SCRIPTVERSION = '1.2.0';
 /** @var string */
 const DATAFILENAME = 'citynamegen_data.json';
 
-const DEF_DOUBLE = 0.10; // default threshold for double names (hyphenated)
-const DEF_PREFIX = 0.15; // default threshold for prefixes
-const DEF_SUFFIX = 0.11; // default threshold for suffixes
+/** @var float Default thresholds */
+const DEF_DOUBLE = 0.10; // Default threshold for double names (hyphenated)
+const DEF_PREFIX = 0.15; // Default threshold for prefixes
+const DEF_SUFFIX = 0.11; // Default threshold for suffixes
 
 // --------------------------------------------------------------------------------------
 // Utilities
