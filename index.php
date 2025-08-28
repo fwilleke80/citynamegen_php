@@ -23,7 +23,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 /** @var string */
 const SCRIPTTITLE = 'City Name Generator';
 /** @var string */
-const SCRIPTVERSION = '1.1.2';
+const SCRIPTVERSION = '1.2.0';
 /** @var string */
 const DATAFILENAME = 'citynamegen_data.json';
 
