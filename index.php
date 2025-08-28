@@ -23,7 +23,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 /** @var string */
 const SCRIPTTITLE = 'City Name Generator';
 /** @var string */
-const SCRIPTVERSION = '1.2.0';
+const SCRIPTVERSION = '1.2.1';
 /** @var string */
 const DATAFILENAME = 'citynamegen_data.json';
 
@@ -81,6 +81,8 @@ final class CityNameGenerator
 	private float $_suffixThreshold = DEF_SUFFIX;
 	private float $_doubleThreshold = DEF_DOUBLE;
 
+	private string $_searchword = '';
+
 	/** @var string[] */
 	private array $_prefixes = [];
 	/** @var string[] */
@@ -126,17 +128,18 @@ final class CityNameGenerator
 	}
 
 	/**
-	 * @brief Override thresholds at runtime; values are clamped to [0,1].
+	 * @brief Override parameters at runtime; values are clamped to [0,1].
 	 * @param[in] prefix  Probability to add a prefix (frand() > threshold in your script)
 	 * @param[in] suffix  Probability to add a suffix
 	 * @param[in] dbl     Probability to hyphenate a double base
 	 * @return void
 	 */
-	public function setThresholds(float $prefix, float $suffix, float $dbl): void
+	public function setParameters(float $prefix, float $suffix, float $dbl, string $searchword): void
 	{
 		$this->_prefixThreshold = max(0.0, min(1.0, $prefix));
 		$this->_suffixThreshold = max(0.0, min(1.0, $suffix));
 		$this->_doubleThreshold = max(0.0, min(1.0, $dbl));
+		$this->_searchword = $searchword;
 	}
 
 	/**
@@ -206,10 +209,46 @@ final class CityNameGenerator
 	 * @brief Generate a single base name from parts.
 	 * @return string
 	 */
-	private function generateBase(): string
+	private function ex_generateBase(): string
 	{
 		$a = $this->_parts[0][array_rand($this->_parts[0])];
 		$b = $this->_parts[1][array_rand($this->_parts[1])];
+		return titlecase($a . $b);
+	}
+
+	/**
+	 * @brief Generate a base name (part0 + part1), optionally biased by _searchword.
+	 * @return string
+	 */
+	private function generateBase(): string
+	{
+		// Default random picks
+		$a = $this->_parts[0][array_rand($this->_parts[0])];
+		$b = $this->_parts[1][array_rand($this->_parts[1])];
+
+		if (!empty($this->_searchword))
+		{
+			// Look for matches in part[0]
+			$matches0 = array_filter($this->_parts[0], function (string $part): bool
+			{
+				return stripos($part, $this->_searchword) !== false;
+			});
+			if (!empty($matches0))
+			{
+				$a = $matches0[array_rand($matches0)];
+			}
+
+			// Look for matches in part[1]
+			$matches1 = array_filter($this->_parts[1], function (string $part): bool
+			{
+				return stripos($part, $this->_searchword) !== false;
+			});
+			if (!empty($matches1))
+			{
+				$b = $matches1[array_rand($matches1)];
+			}
+		}
+
 		return titlecase($a . $b);
 	}
 
@@ -293,6 +332,40 @@ function getInt(string $key, int $def, int $min, int $max): int
 	return $v;
 }
 
+function get01(string $key, float $def): float
+{
+	if (!isset($_GET[$key])) { return $def; }
+	$v = (float)$_GET[$key];
+	if (!is_finite($v)) { return $def; }
+	return max(0.0, min(1.0, $v));
+}
+
+/**
+ * @brief Read a string GET param, with default and optional whitelist.
+ * @param[in] key Name of the GET parameter
+ * @param[in] def Default value if missing or invalid
+ * @param[in] allowed Optional list of allowed values (case-sensitive)
+ * @return string
+ */
+function getStr(string $key, string $def, ?array $allowed = null): string
+{
+	if (!isset($_GET[$key]))
+	{
+		return $def;
+	}
+	$v = (string)$_GET[$key];
+
+	// Trim and normalize if needed
+	$v = trim($v);
+
+	// If whitelist is given, enforce it
+	if (is_array($allowed) && !in_array($v, $allowed, true))
+	{
+		return $def;
+	}
+	return $v;
+}
+
 // --------------------------------------------------------------------------------------
 // Web Controller (only)
 // --------------------------------------------------------------------------------------
@@ -305,21 +378,13 @@ $gen = new CityNameGenerator();
 $dataFile = __DIR__ . DIRECTORY_SEPARATOR . DATAFILENAME;
 $loaded = $gen->loadData($dataFile);
 
-// Helpers (same pattern as in namegen)
-function get01(string $key, float $def): float
-{
-	if (!isset($_GET[$key])) { return $def; }
-	$v = (float)$_GET[$key];
-	if (!is_finite($v)) { return $def; }
-	return max(0.0, min(1.0, $v));
-}
-
 $tprefix = get01('t_prefix', DEF_PREFIX);
 $tsuffix = get01('t_suffix', DEF_SUFFIX);
 $tdouble = get01('t_double', DEF_DOUBLE);
+$tsearchword = getStr('t_searchword', '', null);
 
 // Apply runtime thresholds
-$gen->setThresholds($tprefix, $tsuffix, $tdouble);
+$gen->setParameters($tprefix, $tsuffix, $tdouble, $tsearchword);
 
 mt_srand((int)microtime(true));
 ?>
@@ -343,7 +408,6 @@ mt_srand((int)microtime(true));
 		/* Custom classes */
 		.err { background: #fee; color: #900; padding: 0.75rem; border: 1px solid #f99; border-radius: 8px; }
 		.grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 1rem; }
-		.grid-2 { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 1rem; }
 		.range-row { display: grid; grid-template-columns: 1fr 70px; align-items: center; gap: .75rem; }
 		.range-row output { text-align: right; font-variant-numeric: tabular-nums; }
 		.small { color: #666; font-size: .9rem; }
@@ -374,6 +438,7 @@ mt_srand((int)microtime(true));
 		t_prefix: <?= json_encode(DEF_PREFIX) ?>,
 		t_suffix: <?= json_encode(DEF_SUFFIX) ?>,
 		t_double: <?= json_encode(DEF_DOUBLE) ?>,
+		t_searchword: '',
 		count: 10
 	});
 
@@ -385,6 +450,7 @@ mt_srand((int)microtime(true));
 		f.t_prefix.value = DEF.t_prefix;
 		f.t_suffix.value = DEF.t_suffix;
 		f.t_double.value = DEF.t_double;
+		f.t_searchword.value = DEF.t_searchword;
 
 		// Uncheck stats
 		f.stats.checked = false;
@@ -637,6 +703,12 @@ mt_srand((int)microtime(true));
 					</div>
 					<p class="small">Typischer Wertebereich: 0.00–0.40 (Default <?= number_format(DEF_DOUBLE, 2) ?>)</p>
 				</div>
+
+				<div>
+					<label for="t_searchword">Wort</label>
+					<input id="t_searchword" name="t_searchword" type="string" value="<?= $tsearchword ?>">
+					<p class="small">Wort, das auf jeden Fall vorkommen muss (falls in Datenbank vorhanden)</p>
+				</div>
 			</div>
 		</details>
 
@@ -670,7 +742,7 @@ mt_srand((int)microtime(true));
 				for ($i = 0; $i < $count; ++$i)
 				{
 					$idx = $i + 1;
-					$name = $gen->generate($gender, $mode);
+					$name = $gen->generate();
 					$label = ($count > 1) ? (str_pad((string)$idx, 2, ' ', STR_PAD_LEFT) . '. ') : '';
 					echo '<li>';
 					echo    '<button class="save" data-name="' . htmlspecialchars($name, ENT_QUOTES) . '" title="Favorit speichern">☆</button> ';
