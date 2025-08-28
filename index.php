@@ -110,10 +110,10 @@ final class CityNameGenerator
 		}
 
 		// Settings (optional overrides)
-		$settings = (array)array_get($data, 'settings', []);
-		$this->_prefixThreshold = (float)array_get($settings, 'prefixThreshold', $this->_prefixThreshold);
-		$this->_suffixThreshold = (float)array_get($settings, 'suffixThreshold', $this->_suffixThreshold);
-		$this->_doubleThreshold = (float)array_get($settings, 'doubleThreshold', $this->_doubleThreshold);
+		// $settings = (array)array_get($data, 'settings', []);
+		// $this->_prefixThreshold = (float)array_get($settings, 'prefixThreshold', $this->_prefixThreshold);
+		// $this->_suffixThreshold = (float)array_get($settings, 'suffixThreshold', $this->_suffixThreshold);
+		// $this->_doubleThreshold = (float)array_get($settings, 'doubleThreshold', $this->_doubleThreshold);
 
 		// Strings
 		$strings = (array)array_get($data, 'strings', []);

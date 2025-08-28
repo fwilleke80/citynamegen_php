@@ -1,9 +1,4 @@
 {
-    "settings": {
-        "prefixThreshold": 0.85,
-        "suffixThreshold": 0.89,
-        "doubleThreshold": 0.9
-    },
     "prefixes": [
         "Alt",
         "Bad",
