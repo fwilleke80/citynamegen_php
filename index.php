@@ -329,29 +329,45 @@ mt_srand((int)microtime(true));
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title><?= htmlspecialchars(SCRIPTTITLE . ' ' . SCRIPTVERSION, ENT_QUOTES) ?></title>
 	<style>
+		/* Standard entities */
 		body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; }
 		fieldset { padding: 1rem; border-radius: 8px; }
 		label { display: block; margin: 0.5rem 0 0.25rem; }
 		input[type="number"] { width: 7rem; }
 		pre { background: #111; color: #0f0; padding: 1rem; border-radius: 8px; overflow: auto; }
+		button { padding: .6rem 1rem; border-radius: 10px; border: 1px solid #ccc; background: #f6f6f6; cursor: pointer; -webkit-appearance: none; appearance: none; -webkit-text-fill-color: #111; color: #111; }
+		button:hover { background: #eee; }
+		button.save { padding: 0 .5rem; border-radius: 8px; border: 1px solid #ccc; background: #f6f6f6; cursor: pointer; -webkit-appearance: none; appearance: none; -webkit-text-fill-color: #111; color: #111; }
+		button.save.saved::after { content: ' Saved'; font-size: .85em; color: #3a7; margin-left: .25rem; }
+		/* Custom classes */
 		.err { background: #fee; color: #900; padding: 0.75rem; border: 1px solid #f99; border-radius: 8px; }
 		.grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 1rem; }
 		.grid-2 { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 1rem; }
-		button { padding: .6rem 1rem; border-radius: 10px; border: 1px solid #ccc; background: #f6f6f6; cursor: pointer; -webkit-appearance: none; appearance: none; -webkit-text-fill-color: #111; color: #111; }
-		button:hover { background: #eee; }
 		.range-row { display: grid; grid-template-columns: 1fr 70px; align-items: center; gap: .75rem; }
 		.range-row output { text-align: right; font-variant-numeric: tabular-nums; }
 		.small { color: #666; font-size: .9rem; }
 		hr { border: none; height: 1px; background: #ddd; margin: 1rem 0; }
 		/* Collapsible parameters */
-		details.params { border: 1px solid #ddd; border-radius: 8px; padding: .5rem .75rem; background: #fafafa; }
+		details.params { border: 1px solid #ddd; border-radius: 8px; padding: .5rem .75rem; background: #fafafa; margin-top: 1rem; margin-bottom: 1rem; }
 		details.params > summary { cursor: pointer; user-select: none; display: flex; align-items: center; gap: .5rem; font-weight: 600; outline: none; list-style: none;}
 		details.params > summary::-webkit-details-marker { display: none; }
 		details.params > summary::before { content: '▸'; transition: transform .15s ease-in-out; }
 		details.params[open] > summary::before { transform: rotate(90deg); }
 		details.params .content { margin-top: .75rem; }
+		/* Result list */
+		.results { list-style: none; padding: 0; margin: 0; }
+		.results li { display: flex; align-items: center; gap: .5rem; padding: .25rem 0; border-bottom: 1px dashed #eee; }
+		.results .idx { color: #888; min-width: 2.5rem; text-align: right; }
+		.results .val { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 	</style>
 	<script>
+	// LocalStorage keys
+	const APP_KEY = 'citynamegen'
+	const PARAMS_OPEN_KEY = APP_KEY + '.paramsOpen';
+	const FAVS_KEY = APP_KEY + '.favorites';
+
+	// UI Helpers
+
 	// Defaults as provided by PHP (after JSON load)
 	const DEF = Object.freeze({
 		t_prefix: <?= json_encode(DEF_PREFIX) ?>,
@@ -392,35 +408,190 @@ mt_srand((int)microtime(true));
 		update();
 	}
 
+	// Favorites
+
+	function loadFavs()
+	{
+		try
+		{
+			const raw = localStorage.getItem(FAVS_KEY);
+			if (!raw) { return []; }
+			const arr = JSON.parse(raw);
+			return Array.isArray(arr) ? arr : [];
+		}
+		catch (_)
+		{
+			return [];
+		}
+	}
+
+	function saveFavs(list)
+	{
+		try
+		{
+			localStorage.setItem(FAVS_KEY, JSON.stringify(list));
+		}
+		catch (_)
+		{
+			/* ignore quota errors */
+		}
+	}
+
+	function addFav(name)
+	{
+		const list = loadFavs();
+		if (!list.includes(name))
+		{
+			list.push(name);
+			saveFavs(list);
+		}
+		renderFavs();
+	}
+
+	function removeFav(name)
+	{
+		const list = loadFavs().filter(v => v !== name);
+		saveFavs(list);
+		renderFavs();
+	}
+
+	function renderFavs()
+	{
+		const ul = document.getElementById('favlist');
+		if (!ul) { return; }
+		const favs = loadFavs();
+		ul.innerHTML = '';
+		favs.forEach((v, i) =>
+		{
+			const li = document.createElement('li');
+			const idx = document.createElement('span');
+			idx.className = 'idx';
+			idx.textContent = String(i + 1).padStart(2, ' ') + '. ';
+
+			const val = document.createElement('span');
+			val.className = 'val';
+			val.textContent = v;
+
+			const btn = document.createElement('button');
+			btn.className = 'save saved';
+			btn.textContent = '★';
+			btn.title = 'Von Favoriten entfernen';
+			btn.addEventListener('click', function ()
+			{
+				removeFav(v);
+			});
+
+			li.appendChild(btn);
+			li.appendChild(idx);
+			li.appendChild(val);
+			ul.appendChild(li);
+		});
+	}
+
+	// On DOM ready
 	document.addEventListener('DOMContentLoaded', function ()
 	{
-		const KEY = 'citynamegen.paramsOpen';
+		// UI: Folding Parameters section: Folding Parameters section
 		const d = document.getElementById('genparams');
 		if (!d) { return; }
 
+		// Restore last state
 		try
 		{
-			if (localStorage.getItem(KEY) === '1')
+			if (localStorage.getItem(PARAMS_OPEN_KEY) === '1')
 			{
 				d.setAttribute('open', '');
 			}
 		}
 		catch (_) {}
 
-		// Save on toggle
+		// UI: Folding Parameters section: Save on toggle
 		d.addEventListener('toggle', function ()
 		{
 			try
 			{
-				localStorage.setItem(KEY, d.open ? '1' : '0');
+				localStorage.setItem(PARAMS_OPEN_KEY, d.open ? '1' : '0');
 			}
 			catch (_) {}
 		});
+
+		// Favorites: Wire “Save” buttons in results
+		document.querySelectorAll('#results .save').forEach(btn =>
+		{
+			btn.addEventListener('click', function ()
+			{
+				const name = btn.getAttribute('data-name') || '';
+				if (name)
+				{
+					addFav(name);
+					btn.classList.add('saved');
+					btn.textContent = '★';
+					btn.title = 'Gespeichert';
+				}
+			});
+		});
+
+		// Favorites toolbar
+		const btnCopy = document.getElementById('fav-copy');
+		if (btnCopy)
+		{
+			btnCopy.addEventListener('click', async function ()
+			{
+				const text = loadFavs().join('\n');
+				try
+				{
+					await navigator.clipboard.writeText(text);
+				}
+				catch (_)
+				{
+					/* clipboard may be blocked; ignore */
+				}
+			});
+		}
+
+		const btnExport = document.getElementById('fav-export');
+		if (btnExport)
+		{
+			btnExport.addEventListener('click', function ()
+			{
+				const text = loadFavs().join('\n');
+				const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = APP_KEY + '-favorites.txt';
+				document.body.appendChild(a);
+				a.click();
+				setTimeout(function ()
+				{
+					URL.revokeObjectURL(url);
+					document.body.removeChild(a);
+				}, 0);
+			});
+		}
+
+		const btnClear = document.getElementById('fav-clear');
+		if (btnClear)
+		{
+			btnClear.addEventListener('click', function ()
+			{
+				if (confirm('Favoritenliste leeren?'))
+				{
+					saveFavs([]);
+					renderFavs();
+				}
+			});
+		}
+
+		// Initial render
+		renderFavs();
 	});
 	</script>
 </head>
 <body>
 	<h1><?= htmlspecialchars(SCRIPTTITLE . ' ' . SCRIPTVERSION, ENT_QUOTES) ?></h1>
+
+	<!-- Input and parameters form -->
 
 	<form id="form" method="get">
 		<fieldset class="grid">
@@ -435,9 +606,6 @@ mt_srand((int)microtime(true));
 				</label>
 			</div>
 		</fieldset>
-
-		<hr>
-
 		<details id="genparams" class="params">
 			<summary>Parameter</summary>
 
@@ -471,6 +639,8 @@ mt_srand((int)microtime(true));
 			</div>
 		</details>
 
+		<hr>
+
 		<p style="margin-top:1rem; display:flex; gap:.5rem; flex-wrap:wrap">
 			<button type="submit">Generieren!</button>
 			<button type="button" onclick="resetToDefaults()">Zur&uuml;cksetzen</button>
@@ -484,6 +654,8 @@ mt_srand((int)microtime(true));
 	bindRange('t_double', 'out_double');
 	</script>
 
+	<!-- Results or error message -->
+
 	<?php if (!$loaded): ?>
 		<p class="err">Konnte <code><?= htmlspecialchars(DATAFILENAME, ENT_QUOTES) ?></code> im aktuellen Ordner nicht laden.</p>
 	<?php else: ?>
@@ -492,20 +664,42 @@ mt_srand((int)microtime(true));
 			<pre><?php ob_start(); $gen->printStatistics($gen->computeStats()); echo htmlspecialchars(ob_get_clean(), ENT_QUOTES); ?></pre>
 		<?php else: ?>
 			<h2><?php echo $count; ?> Städte die man mal besuchen sollte:</h2>
-			<pre><?php
-				$out = '';
+			<ul id="results" class="results">
+			<?php
 				for ($i = 0; $i < $count; ++$i)
 				{
-					$prefix = ($count > 1) ? str_pad((string)($i + 1), 2, ' ', STR_PAD_LEFT) . '. ' : '';
-					$out .= $prefix . $gen->generate() . "\n";
+					$idx = $i + 1;
+					$name = $gen->generate($gender, $mode);
+					$label = ($count > 1) ? (str_pad((string)$idx, 2, ' ', STR_PAD_LEFT) . '. ') : '';
+					echo '<li>';
+					echo    '<button class="save" data-name="' . htmlspecialchars($name, ENT_QUOTES) . '" title="Favorit speichern">☆</button> ';
+					echo    '<span class="idx">' . htmlspecialchars($label, ENT_QUOTES) . '</span>';
+					echo    '<span class="val">' . htmlspecialchars($name, ENT_QUOTES) . '</span>';
+					echo '</li>';
 				}
-				echo htmlspecialchars($out, ENT_QUOTES);
-			?></pre>
+			?>
+			</ul>
 		<?php endif; ?>
 	<?php endif; ?>
+
+	<!-- Favorites list -->
+
+	<details id="favorites" class="params">
+		<summary>Favoriten</summary>
+		<div class="content">
+			<ul id="favlist" class="results"></ul>
+			<p style="margin-top:.75rem; display:flex; gap:.5rem; flex-wrap:wrap">
+				<button type="button" id="fav-copy">Kopieren</button>
+				<button type="button" id="fav-export">Exportiere .txt</button>
+				<button type="button" id="fav-clear">Leeren</button>
+			</p>
+		</div>
+	</details>
+
+	<!-- Link to other generator script -->
+
 	<?php
 	$otherApp = __DIR__ . '/../namegen/index.php';
-
 	if (file_exists($otherApp))
 	{
 		echo '<p>Probier auch mal den <a href="../namegen/">German Name Generator</a>!</p>';
