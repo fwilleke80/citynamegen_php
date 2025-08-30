@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 ini_set('display_errors', '0');  // don’t leak stack traces
 ini_set('log_errors', '1');
-@set_time_limit(5);                    // short runtime
+@set_time_limit(2);                    // short runtime
 @ini_set('memory_limit', '64M'); // small memory cap is fine for this
 
 header("Content-Security-Policy: default-src 'self'; base-uri 'self'; form-action 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'");
@@ -776,6 +776,11 @@ mt_srand((int)microtime(true));
 	if (file_exists($otherApp))
 	{
 		echo '<p>Probier auch mal den <a href="../namegen/">German Name Generator</a>!</p>';
+	}
+	$otherApp = __DIR__ . '/../tkkg_generator/index.php';
+	if (file_exists($otherApp))
+	{
+		echo '<p>Oder koste mal den <a href="../tkkg_generator/">TKKG Folgentitel Generator</a>!</p>';
 	}
 	?>
 	<p class="footer">&copy; 2025 by <a href="https://www.frankwilleke.de">www.frankwilleke.de</a></p>
